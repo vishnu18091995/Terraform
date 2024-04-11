@@ -1,0 +1,93 @@
+name: test-dev
+on:  
+  workflow_dispatch:
+    inputs:
+      region:
+        description: 'aws-region'
+        default: 'ap-south-1'
+        required: true
+      access_key:
+        description: 'access-key'
+        required: true  
+      secret-access-key:
+        description: 'secret-access-key'
+        required: true
+      sts-token:
+        description: 'sts-token'
+        required: true
+      remote_state_s3_name:
+        description: 'remote_state_s3_name'
+        required: true
+      dynamodb_name:
+        description: 'dynamodb_name'
+        required: true
+        
+jobs:
+  s3-remote-backend:
+    name: s3-remote-backend
+    runs-on: [test-cicd, self-hosted]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.1.4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: ${{ github.event.inputs.region }}
+          aws-access-key-id: ${{ github.event.inputs.access_key }}
+          aws-secret-access-key: ${{ github.event.inputs.secret-access-key }}    
+          aws-session-token: ${{ github.event.inputs.sts-token }}
+            
+      - name: Setup S3 Bucket For Backend
+        id: fmt
+        run: cd remote_backend && chmod +x ../.github/scripts/s3-state.sh && sh -x ../.github/scripts/s3-state.sh "${{ github.event.inputs.remote_state_s3_name }}" "${{ github.event.inputs.dynamodb_name }}"
+
+  terraform:
+    name: dolphin-infra
+    runs-on: test-cicd
+    needs: s3-remote-backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.1.4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: ${{ github.event.inputs.region }}
+          aws-access-key-id: ${{ github.event.inputs.access_key }}
+          aws-secret-access-key: ${{ github.event.inputs.secret-access-key }}   
+          aws-session-token: ${{ github.event.inputs.sts-token }}
+            
+      - name: Terraform Format
+        id: fmt
+        run: terraform fmt
+
+      - name: Terraform Init
+        id: init
+        run: terraform init --backend-config="bucket=${{ github.event.inputs.remote_state_s3_name }}" --backend-config="key=mbride2-dolphin-dev-backend/terraform.tfstate" --backend-config="region=${{ github.event.inputs.region }}" --var-file "env-tfvars/terraform-mbride2-dev.tfvars" 
+           
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -input=false --var-file "env-tfvars/terraform-mbride2-dev.tfvars" 
+        continue-on-error: true
+
+      - name: Terraform Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -input=false --var-file "env-tfvars/terraform-mbride2-dev.tfvars" 
