@@ -15,9 +15,9 @@ on:
       # sts-token:
       #   description: 'sts-token'
       #   required: true
-      # remote_state_s3_name:
-      #   description: 'remote_state_s3_name'
-      #   required: true
+      remote_state_s3_name:
+        description: 'remote_state_s3_name'
+        required: true
       # dynamodb_name:
       #   description: 'dynamodb_name'
       #   required: true
