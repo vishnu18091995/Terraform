@@ -25,7 +25,7 @@ on:
 jobs:
   s3-remote-backend:
     name: s3-remote-backend
-    runs-on: [test-cicd, self-hosted]
+#    runs-on: [test-cicd, self-hosted]
     steps:
       - name: Checkout
         uses: actions/checkout@v3
